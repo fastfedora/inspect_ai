@@ -1,7 +1,7 @@
 import os
 import struct
 import zlib
-from typing import BinaryIO, List
+from typing import Any, BinaryIO, List
 
 
 class ZipAppender:
@@ -122,9 +122,9 @@ class ZipAppender:
         )
         self.file.write(eocd)
 
-    def __enter__(self):
+    def __enter__(self) -> "ZipAppender":
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, *execinfo: Any) -> None:
         self.file.flush()
         self.file.close()
