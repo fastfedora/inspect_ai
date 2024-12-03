@@ -1,6 +1,6 @@
 import json
 from typing import Any, Literal, cast
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZipFile
 
 from pydantic import BaseModel, Field
 from pydantic_core import to_json
@@ -9,9 +9,8 @@ from typing_extensions import override
 from inspect_ai._util.constants import LOG_SCHEMA_VERSION
 from inspect_ai._util.content import ContentImage, ContentText
 from inspect_ai._util.error import EvalError
-from inspect_ai._util.file import dirname, file, filesystem
+from inspect_ai._util.file import dirname, file
 from inspect_ai._util.json import jsonable_python
-from inspect_ai._util.zip import ZipAppender
 from inspect_ai.model._chat_message import ChatMessage
 from inspect_ai.scorer._metric import Score
 
@@ -89,8 +88,16 @@ class EvalRecorder(FileRecorder):
         # create zip wrapper
         zip_log_file = ZipLogFile(file=file)
 
-        # Initialise the zip log file
-        zip_log_file.init()
+        # Initialize the summary counter and existing summaries
+        with ZipFile(file, "a") as zip:
+            summary_counter = _read_summary_counter(zip)
+            summaries = _read_all_summaries(zip, summary_counter)
+
+            # Initialize the eval header (without results)
+            log_start = _read_start(zip)
+
+        # The zip log file
+        zip_log_file.init(log_start, summary_counter, summaries)
 
         # track zip
         self.data[self._log_file_key(eval)] = zip_log_file
@@ -230,9 +237,13 @@ class EvalRecorder(FileRecorder):
         )
 
     # write to the zip file
-    def _write(self, eval: EvalSpec, filename: str, data: Any) -> None:
+    def _write(
+        self, eval: EvalSpec, filename: str, data: Any, *, append: bool = False
+    ) -> None:
         log = self.data[self._log_file_key(eval)]
-        log.append(filename, data)
+
+        with ZipFile(log.file, "a") as zip:
+            zip.writestr(filename, zip_file_data(data))
 
     # write buffered samples to the zip file
     def _write_buffered_samples(self, eval: EvalSpec) -> None:
@@ -268,7 +279,7 @@ class EvalRecorder(FileRecorder):
             log.summaries.extend(summaries)
 
 
-def zip_data_json(data: Any) -> bytes:
+def zip_file_data(data: Any) -> bytes:
     return to_json(
         value=jsonable_python(data),
         indent=2,
@@ -300,35 +311,20 @@ def text_inputs(inputs: str | list[ChatMessage]) -> str | list[ChatMessage]:
 class ZipLogFile:
     def __init__(self, file: str) -> None:
         self.file = file
-        self.fs = filesystem(file)
         self.samples: list[EvalSample] = []
         self.summary_counter = 0
         self.summaries: list[SampleSummary] = []
         self.log_start: LogStart | None = None
 
-    def init(self) -> None:
-        if self.fs.exists(self.file):
-            with file(self.file, "rb") as f:
-                with ZipFile(f, "r") as zf:
-                    # Initialize the summary counter and existing summaries
-                    self.summary_counter = _read_summary_counter(zf)
-                    self.summaries = _read_all_summaries(zf, self.summary_counter)
-
-                    # Initialize the eval header (without results)
-                    self.log_start = _read_start(zf)
-
-    def append(self, filename: str, data: Any) -> None:
-        if not self.fs.exists(self.file):
-            with file(self.file, "wb") as f:
-                with ZipFile(
-                    f, mode="a", compression=ZIP_DEFLATED, compresslevel=6
-                ) as zf:
-                    zf.writestr(filename, zip_data_json(data))
-                f.flush()
-        else:
-            with file(self.file, "ab+") as f:
-                with ZipAppender(f) as zf:
-                    zf.append_file(filename, zip_data_json(data))
+    def init(
+        self,
+        log_start: LogStart | None,
+        summary_counter: int,
+        summaries: list[SampleSummary],
+    ) -> None:
+        self.summary_counter = summary_counter
+        self.summaries = summaries
+        self.log_start = log_start
 
 
 def _read_start(zip: ZipFile) -> LogStart | None:
