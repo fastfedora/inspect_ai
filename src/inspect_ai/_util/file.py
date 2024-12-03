@@ -20,8 +20,8 @@ from s3fs import S3FileSystem  # type: ignore
 # https://filesystem-spec.readthedocs.io/en/latest/api.html#fsspec.generic.GenericFileSystem
 
 
-OpenTextMode = Literal["r", "a", "w"]
-OpenBinaryMode = Literal["rb", "ab", "wb"]
+OpenTextMode = Literal["r", "a", "w", "r+", "a+", "w+"]
+OpenBinaryMode = Literal["rb", "ab", "wb", "rb+", "ab+", "wb+"]
 
 
 @overload

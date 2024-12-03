@@ -9,8 +9,8 @@ class ZipAppender:
     CENTRAL_DIR_HEADER: bytes = b"PK\x01\x02"
     END_CENTRAL_DIR: bytes = b"PK\x05\x06"
 
-    def __init__(self, file_obj: BinaryIO) -> None:
-        self.file: BinaryIO = file_obj
+    def __init__(self, file: BinaryIO) -> None:
+        self.file: BinaryIO = file
         self.existing_entries: List[bytes] = []
         self._load_central_dir()
 
@@ -121,4 +121,10 @@ class ZipAppender:
             + struct.pack("<H", 0)  # Comment length
         )
         self.file.write(eocd)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
         self.file.flush()
+        self.file.close()
