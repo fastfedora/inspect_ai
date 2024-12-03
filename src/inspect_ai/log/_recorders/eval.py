@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Any, Literal, cast
 from zipfile import ZipFile
 
@@ -11,6 +12,7 @@ from inspect_ai._util.content import ContentImage, ContentText
 from inspect_ai._util.error import EvalError
 from inspect_ai._util.file import dirname, file
 from inspect_ai._util.json import jsonable_python
+from inspect_ai._util.zip import ZipAppender
 from inspect_ai.model._chat_message import ChatMessage
 from inspect_ai.scorer._metric import Score
 
@@ -25,6 +27,10 @@ from .._log import (
     sort_samples,
 )
 from .file import FileRecorder
+
+# TODO: Test on S3
+# TODO: Ensure consistant ZIP_DEFLATE and compression level
+# TODO: Incorporate version that truncates the old central directory
 
 
 class SampleSummary(BaseModel):
@@ -83,27 +89,33 @@ class EvalRecorder(FileRecorder):
     @override
     def log_init(self, eval: EvalSpec, location: str | None = None) -> str:
         # file to write to
-        file = location or self._log_file_path(eval)
+        zip_file = location or self._log_file_path(eval)
 
         # create zip wrapper
-        zip_log_file = ZipLogFile(file=file)
+        zip_log_file = ZipLogFile(file=zip_file)
 
-        # Initialize the summary counter and existing summaries
-        with ZipFile(file, "a") as zip:
-            summary_counter = _read_summary_counter(zip)
-            summaries = _read_all_summaries(zip, summary_counter)
+        # create new zip file or read existing summaries/header
+        if not os.path.exists(zip_file):
+            with file(zip_file, "wb") as f:
+                with ZipFile(zip_file, "w"):
+                    log_start: LogStart | None = None
+                    summary_counter = 0
+                    summaries: list[SampleSummary] = []
+        else:
+            with file(zip_file, "rb") as f:
+                with ZipFile(f, "r") as zip:
+                    log_start = _read_start(zip)
+                    summary_counter = _read_summary_counter(zip)
+                    summaries = _read_all_summaries(zip, summary_counter)
 
-            # Initialize the eval header (without results)
-            log_start = _read_start(zip)
-
-        # The zip log file
+        # initialise the zip file
         zip_log_file.init(log_start, summary_counter, summaries)
 
         # track zip
         self.data[self._log_file_key(eval)] = zip_log_file
 
         # return file path
-        return file
+        return zip_file
 
     @override
     def log_start(self, eval: EvalSpec, plan: EvalPlan) -> None:
@@ -237,13 +249,12 @@ class EvalRecorder(FileRecorder):
         )
 
     # write to the zip file
-    def _write(
-        self, eval: EvalSpec, filename: str, data: Any, *, append: bool = False
-    ) -> None:
+    def _write(self, eval: EvalSpec, filename: str, data: Any) -> None:
         log = self.data[self._log_file_key(eval)]
 
-        with ZipFile(log.file, "a") as zip:
-            zip.writestr(filename, zip_file_data(data))
+        with file(log.file, "rb+") as f:
+            with ZipAppender(f) as zip:
+                zip.append_file(filename, zip_file_data(data))
 
     # write buffered samples to the zip file
     def _write_buffered_samples(self, eval: EvalSpec) -> None:
@@ -306,6 +317,10 @@ def text_inputs(inputs: str | list[ChatMessage]) -> str | list[ChatMessage]:
         return input
     else:
         return inputs
+
+
+# TODO: We probably need the spooled TempFile, and then instead of writing the whole thing to S3, we just
+# use our appender and then take just those bytes and write them to S3 (maybe even a reader/writer in the appender?)
 
 
 class ZipLogFile:

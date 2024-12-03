@@ -28,7 +28,7 @@ def create_zip(buffer: BinaryIO) -> None:
 @contextlib.contextmanager
 def temporary_zip_file() -> Iterator[BinaryIO]:
     with tempfile.NamedTemporaryFile() as temp:
-        with file(temp.name, "wb+") as f:
+        with file(temp.name, "rb+") as f:
             create_zip(f)
             yield f
 
