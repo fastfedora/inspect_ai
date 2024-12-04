@@ -29,6 +29,7 @@ from .._log import (
 from .file import FileRecorder
 
 # TODO: Test on S3
+# TODO: Version which efficiently reads central directory
 # TODO: Incorporate version that truncates the old central directory
 
 
