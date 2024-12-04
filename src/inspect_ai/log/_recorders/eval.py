@@ -79,9 +79,8 @@ class EvalRecorder(FileRecorder):
 
     @override
     def default_log_buffer(self) -> int:
-        # .eval files are 5-8x smaller than .json files so we
-        # are much less worried about flushing frequently
-        return 10
+        # all appends are now fully incremental so no need to buffer
+        return 1
 
     def __init__(self, log_dir: str, fs_options: dict[str, Any] = {}):
         super().__init__(log_dir, ".eval", fs_options)
