@@ -236,14 +236,15 @@ class EvalRecorder(FileRecorder):
         cls, location: str, id: str | int, epoch: int = 1
     ) -> EvalSample:
         with file(location, "rb") as z:
-            with ZipFile(z, mode="r") as zip:
-                try:
-                    with zip.open(_sample_filename(id, epoch), "r") as f:
-                        return EvalSample(**json.load(f))
-                except KeyError:
-                    raise IndexError(
-                        f"Sample id {id} for epoch {epoch} not found in log {location}"
-                    )
+            zip = ZipReader(z)
+            sample_file = _sample_filename(id, epoch)
+            if sample_file in zip.filenames():
+                contents = zip.read(sample_file)
+                return EvalSample(**json.loads(contents.decode()))
+            else:
+                raise IndexError(
+                    f"Sample id {id} for epoch {epoch} not found in log {location}"
+                )
 
     @classmethod
     @override
