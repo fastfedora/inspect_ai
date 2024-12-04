@@ -2,12 +2,16 @@ import os
 import struct
 import zlib
 from typing import Any, BinaryIO, List
+from zipfile import ZIP_DEFLATED
 
 
 class ZipAppender:
     ZIP_HEADER: bytes = b"PK\x03\x04"
     CENTRAL_DIR_HEADER: bytes = b"PK\x01\x02"
     END_CENTRAL_DIR: bytes = b"PK\x05\x06"
+
+    COMPRESSION_TYPE = ZIP_DEFLATED
+    COMPRESSION_LEVEL = 5
 
     def __init__(self, file: BinaryIO) -> None:
         self.file: BinaryIO = file
@@ -55,7 +59,9 @@ class ZipAppender:
 
     def append_file(self, filename: str, data: bytes) -> None:
         local_header_offset: int = self.file.tell()
-        compressor = zlib.compressobj(level=9, wbits=-15)
+        compressor = zlib.compressobj(
+            level=self.COMPRESSION_LEVEL, method=self.COMPRESSION_TYPE, wbits=-15
+        )
         compressed_data: bytes = compressor.compress(data) + compressor.flush()
         crc: int = zlib.crc32(data)
 

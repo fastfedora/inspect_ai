@@ -29,7 +29,6 @@ from .._log import (
 from .file import FileRecorder
 
 # TODO: Test on S3
-# TODO: Ensure consistant ZIP_DEFLATE and compression level
 # TODO: Incorporate version that truncates the old central directory
 
 
@@ -97,7 +96,12 @@ class EvalRecorder(FileRecorder):
         # create new zip file or read existing summaries/header
         if not os.path.exists(zip_file):
             with file(zip_file, "wb") as f:
-                with ZipFile(zip_file, "w"):
+                with ZipFile(
+                    f,
+                    "w",
+                    compression=ZipAppender.COMPRESSION_TYPE,
+                    compresslevel=ZipAppender.COMPRESSION_LEVEL,
+                ):
                     log_start: LogStart | None = None
                     summary_counter = 0
                     summaries: list[SampleSummary] = []
