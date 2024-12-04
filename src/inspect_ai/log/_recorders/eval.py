@@ -34,10 +34,6 @@ from .._log import (
 )
 from .file import FileRecorder
 
-# TODO: Test on S3
-# TODO: Charles on sample summaries not being read before
-# TODO: Charles on frequency of writing sample summaries
-
 
 class SampleSummary(BaseModel):
     id: int | str
