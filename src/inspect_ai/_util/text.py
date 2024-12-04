@@ -108,3 +108,18 @@ def str_to_float(s: str) -> float:
         exponent = 1  # Default exponent is 1 if no superscript is present
 
     return base**exponent
+
+
+def is_number(s: str) -> bool:
+    """Check if a string is a valid number.
+
+    Args:
+       s (str): String to check
+
+    Returns:
+       bool: True if the string is a valid number, False otherwise
+    """
+    # strip decimal point or leading negative sign
+    stripped = s.lstrip("-").replace(".", "")
+
+    return stripped.isnumeric()

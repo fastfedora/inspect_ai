@@ -2,6 +2,7 @@ import re
 from typing import Callable, Literal
 
 from inspect_ai._util.text import (
+    is_number,
     str_to_float,
     strip_numeric_punctuation,
     strip_punctuation,
@@ -63,7 +64,9 @@ def match_str(
         t = t.casefold()
 
     # target must be parseable as a number for numeric to apply
-    if numeric and strip_numeric_punctuation(t).replace(".", "").isnumeric():
+    match_number = numeric and is_number(strip_numeric_punctuation(t))
+
+    if match_number:
         # remove punctuation
         v = strip_numeric_punctuation(v)
         t = strip_numeric_punctuation(t)
@@ -84,7 +87,9 @@ def match_str(
         t = strip_punctuation(t)
 
     # comparisons
-    if location == "begin":
+    if match_number:
+        return answer, v == t
+    elif location == "begin":
         return answer, v.startswith(t)
     elif location == "end":
         return answer, v.endswith(t)
@@ -95,14 +100,12 @@ def match_str(
 
 
 def first_number_normalized(words: list[str]) -> str:
-    number = next(
-        (word for word in words if word.replace(".", "").isnumeric()), words[0]
-    )
+    number = next((word for word in words if is_number(word)), words[0])
     return normalize_number(number)
 
 
 def normalize_number(number: str, precision: int = 5) -> str:
-    if number.replace(".", "").isnumeric():
+    if is_number(number):
         num = str_to_float(number)
         return format(num, f".{precision}g")
     else:
