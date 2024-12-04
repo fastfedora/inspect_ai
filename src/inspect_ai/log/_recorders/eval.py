@@ -207,10 +207,9 @@ class EvalRecorder(FileRecorder):
             zip = ZipReader(z)
             evalLog = _read_header(zip, location)
             if REDUCTIONS_JSON in zip.filenames():
-                contents = zip.read(REDUCTIONS_JSON)
                 reductions = [
                     EvalSampleReductions(**reduction)
-                    for reduction in json.loads(contents.decode())
+                    for reduction in _read_json(zip, REDUCTIONS_JSON)
                 ]
                 if evalLog.results is not None:
                     evalLog.reductions = reductions
@@ -220,8 +219,7 @@ class EvalRecorder(FileRecorder):
                 samples = []
                 for name in zip.filenames():
                     if name.startswith(f"{SAMPLES_DIR}/") and name.endswith(".json"):
-                        contents = zip.read(name)
-                        samples.append(EvalSample(**json.loads(contents.decode())))
+                        samples.append(EvalSample(**_read_json(zip, name)))
                 sort_samples(samples)
                 evalLog.samples = samples
             return evalLog
@@ -235,8 +233,7 @@ class EvalRecorder(FileRecorder):
             zip = ZipReader(z)
             sample_file = _sample_filename(id, epoch)
             if sample_file in zip.filenames():
-                contents = zip.read(sample_file)
-                return EvalSample(**json.loads(contents.decode()))
+                return EvalSample(**_read_json(zip, sample_file))
             else:
                 raise IndexError(
                     f"Sample id {id} for epoch {epoch} not found in log {location}"
@@ -391,13 +388,11 @@ def _read_all_summaries(zip: ZipReader, count: int) -> list[SampleSummary]:
 def _read_header(zip: ZipReader, location: str) -> EvalLog:
     # first see if the header is here
     if HEADER_JSON in zip.filenames():
-        contents = zip.read(HEADER_JSON)
-        log = EvalLog(**json.loads(contents.decode()))
+        log = EvalLog(**_read_json(zip, HEADER_JSON))
         log.location = location
         return log
     else:
-        contents = zip.read(_journal_path(START_JSON))
-        start = LogStart(**json.loads(contents.decode()))
+        start = LogStart(**_read_json(zip, _journal_path(START_JSON)))
         return EvalLog(
             version=start.version, eval=start.eval, plan=start.plan, location=location
         )
