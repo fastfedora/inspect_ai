@@ -206,29 +206,27 @@ class EvalRecorder(FileRecorder):
     @override
     def read_log(cls, location: str, header_only: bool = False) -> EvalLog:
         with file(location, "rb") as z:
-            with ZipFile(z, mode="r") as zip:
-                evalLog = _read_header(zip, location)
-                if REDUCTIONS_JSON in zip.namelist():
-                    with zip.open(REDUCTIONS_JSON, "r") as f:
-                        reductions = [
-                            EvalSampleReductions(**reduction)
-                            for reduction in json.load(f)
-                        ]
-                        if evalLog.results is not None:
-                            evalLog.reductions = reductions
+            zip = ZipReader(z)
+            evalLog = _read_header(zip, location)
+            if REDUCTIONS_JSON in zip.filenames():
+                contents = zip.read(REDUCTIONS_JSON)
+                reductions = [
+                    EvalSampleReductions(**reduction)
+                    for reduction in json.loads(contents.decode())
+                ]
+                if evalLog.results is not None:
+                    evalLog.reductions = reductions
 
-                samples: list[EvalSample] | None = None
-                if not header_only:
-                    samples = []
-                    for name in zip.namelist():
-                        if name.startswith(f"{SAMPLES_DIR}/") and name.endswith(
-                            ".json"
-                        ):
-                            with zip.open(name, "r") as f:
-                                samples.append(EvalSample(**json.load(f)))
-                    sort_samples(samples)
-                    evalLog.samples = samples
-                return evalLog
+            samples: list[EvalSample] | None = None
+            if not header_only:
+                samples = []
+                for name in zip.filenames():
+                    if name.startswith(f"{SAMPLES_DIR}/") and name.endswith(".json"):
+                        contents = zip.read(name)
+                        samples.append(EvalSample(**json.loads(contents.decode())))
+                sort_samples(samples)
+                evalLog.samples = samples
+            return evalLog
 
     @override
     @classmethod
@@ -396,16 +394,16 @@ def _read_all_summaries(zip: ZipReader, count: int) -> list[SampleSummary]:
         return summaries
 
 
-def _read_header(zip: ZipFile, location: str) -> EvalLog:
+def _read_header(zip: ZipReader, location: str) -> EvalLog:
     # first see if the header is here
-    if HEADER_JSON in zip.namelist():
-        with zip.open(HEADER_JSON, "r") as f:
-            log = EvalLog(**json.load(f))
-            log.location = location
-            return log
+    if HEADER_JSON in zip.filenames():
+        contents = zip.read(HEADER_JSON)
+        log = EvalLog(**json.loads(contents.decode()))
+        log.location = location
+        return log
     else:
-        with zip.open(_journal_path(START_JSON), "r") as f:
-            start = LogStart(**json.load(f))
+        contents = zip.read(_journal_path(START_JSON))
+        start = LogStart(**json.loads(contents.decode()))
         return EvalLog(
             version=start.version, eval=start.eval, plan=start.plan, location=location
         )
