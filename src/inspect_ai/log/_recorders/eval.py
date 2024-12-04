@@ -328,10 +328,6 @@ def text_inputs(inputs: str | list[ChatMessage]) -> str | list[ChatMessage]:
         return inputs
 
 
-# TODO: We probably need the spooled TempFile, and then instead of writing the whole thing to S3, we just
-# use our appender and then take just those bytes and write them to S3 (maybe even a reader/writer in the appender?)
-
-
 class ZipLogFile:
     def __init__(self, file: str) -> None:
         self.file = file
