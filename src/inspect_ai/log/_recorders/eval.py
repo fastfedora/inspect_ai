@@ -364,7 +364,6 @@ def _read_summary_counter(zip: ZipReader) -> int:
 def _read_all_summaries(zip: ZipReader, count: int) -> list[SampleSummary]:
     if SUMMARIES_JSON in zip.filenames():
         summaries_raw = _read_json(zip, SUMMARIES_JSON)
-        print(json.dumps(summaries_raw, indent=2))
         if isinstance(summaries_raw, list):
             return [SampleSummary(**value) for value in summaries_raw]
         else:
