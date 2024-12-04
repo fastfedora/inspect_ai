@@ -36,6 +36,7 @@ from .file import FileRecorder
 
 # TODO: Test on S3
 # TODO: Charles on sample summaries not being read before
+# TODO: Charles on frequency of writing sample summaries
 
 
 class SampleSummary(BaseModel):
@@ -91,15 +92,15 @@ class EvalRecorder(FileRecorder):
 
         # each eval has a unique key (created from run_id and task name/version)
         # which we use to track the output path, accumulated data, and event counter
-        self.data: dict[str, ZipLogFile] = {}
+        self.data: dict[str, LogContext] = {}
 
     @override
     def log_init(self, eval: EvalSpec, location: str | None = None) -> str:
         # file to write to
         zip_file = location or self._log_file_path(eval)
 
-        # create zip wrapper
-        zip_log_file = ZipLogFile(file=zip_file)
+        # create log context
+        log = LogContext(file=zip_file)
 
         # create new zip file or read existing summaries/header
         if not os.path.exists(zip_file):
@@ -120,11 +121,11 @@ class EvalRecorder(FileRecorder):
                 summary_counter = _read_summary_counter(zip)
                 summaries = _read_all_summaries(zip, summary_counter)
 
-        # initialise the zip file
-        zip_log_file.init(log_start, summary_counter, summaries)
+        # initialise the context
+        log.init(log_start, summary_counter, summaries)
 
-        # track zip
-        self.data[self._log_file_key(eval)] = zip_log_file
+        # track context
+        self.data[self._log_file_key(eval)] = log
 
         # return file path
         return zip_file
@@ -335,7 +336,7 @@ def text_inputs(inputs: str | list[ChatMessage]) -> str | list[ChatMessage]:
         return inputs
 
 
-class ZipLogFile:
+class LogContext:
     def __init__(self, file: str) -> None:
         self.file = file
         self.samples: list[EvalSample] = []
