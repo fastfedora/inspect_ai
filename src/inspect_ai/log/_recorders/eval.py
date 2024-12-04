@@ -1,6 +1,7 @@
+import contextlib
 import json
 import os
-from typing import Any, Literal, cast
+from typing import Any, Callable, Iterator, Literal, cast
 from zipfile import ZipFile
 
 from pydantic import BaseModel, Field
@@ -34,6 +35,7 @@ from .._log import (
 from .file import FileRecorder
 
 # TODO: Test on S3
+# TODO: Charles on sample summaries not being read before
 
 
 class SampleSummary(BaseModel):
@@ -58,6 +60,8 @@ class LogResults(BaseModel):
     results: EvalResults | None = Field(default=None)
     error: EvalError | None = Field(default=None)
 
+
+ZipWrite = Callable[[str, Any], None]
 
 JOURNAL_DIR = "_journal"
 SUMMARY_DIR = "summaries"
@@ -128,7 +132,8 @@ class EvalRecorder(FileRecorder):
     @override
     def log_start(self, eval: EvalSpec, plan: EvalPlan) -> None:
         start = LogStart(version=LOG_SCHEMA_VERSION, eval=eval, plan=plan)
-        self._write(eval, _journal_path(START_JSON), start)
+        with self._zip_write(eval) as write:
+            write(_journal_path(START_JSON), start)
 
         log = self.data[self._log_file_key(eval)]  # noqa: F841
         log.log_start = start
@@ -141,7 +146,8 @@ class EvalRecorder(FileRecorder):
     @override
     def flush(self, eval: EvalSpec) -> None:
         # write the buffered samples
-        self._write_buffered_samples(eval)
+        with self._zip_write(eval) as write:
+            self._write_buffered_samples(write, eval)
 
     @override
     def log_finish(
@@ -157,42 +163,42 @@ class EvalRecorder(FileRecorder):
         key = self._log_file_key(eval)
         log = self.data[key]
 
-        # write the buffered samples
-        self._write_buffered_samples(eval)
+        with self._zip_write(eval) as write:
+            # write the buffered samples
+            self._write_buffered_samples(write, eval)
 
-        # write consolidated summaries
-        self._write(eval, SUMMARIES_JSON, log.summaries)
+            # write consolidated summaries
+            write(SUMMARIES_JSON, log.summaries)
 
-        # write reductions
-        if reductions is not None:
-            self._write(
-                eval,
-                REDUCTIONS_JSON,
-                reductions,
+            # write reductions
+            if reductions is not None:
+                write(
+                    REDUCTIONS_JSON,
+                    reductions,
+                )
+
+            # Get the results
+            log_results = LogResults(
+                status=status, stats=stats, results=results, error=error
             )
 
-        # Get the results
-        log_results = LogResults(
-            status=status, stats=stats, results=results, error=error
-        )
+            # add the results to the original eval log from start.json
+            log_start = log.log_start
+            if log_start is None:
+                raise RuntimeError("Unexpectedly issing the log start value")
 
-        # add the results to the original eval log from start.json
-        log_start = log.log_start
-        if log_start is None:
-            raise RuntimeError("Unexpectedly issing the log start value")
+            eval_header = EvalLog(
+                version=log_start.version,
+                eval=log_start.eval,
+                plan=log_start.plan,
+                results=log_results.results,
+                stats=log_results.stats,
+                status=log_results.status,
+                error=log_results.error,
+            )
 
-        eval_header = EvalLog(
-            version=log_start.version,
-            eval=log_start.eval,
-            plan=log_start.plan,
-            results=log_results.results,
-            stats=log_results.stats,
-            status=log_results.status,
-            error=log_results.error,
-        )
-
-        # write the results
-        self._write(eval, HEADER_JSON, eval_header)
+            # write the results
+            write(HEADER_JSON, eval_header)
 
         # stop tracking this eval
         del self.data[key]
@@ -252,18 +258,22 @@ class EvalRecorder(FileRecorder):
             log.eval, log.status, log.stats, log.results, log.reductions, log.error
         )
 
-    # write to the zip file
-    def _write(self, eval: EvalSpec, filename: str, data: Any) -> None:
+    @contextlib.contextmanager
+    def _zip_write(self, eval: EvalSpec) -> Iterator[ZipWrite]:
         log = self.data[self._log_file_key(eval)]
 
         with file(log.file, "rb") as f:
             reader = ZipReader(f)
         with file(log.file, "ab") as f:
-            with ZipWriter(f, reader) as zip:
-                zip.write(filename, zip_file_data(data))
+            with ZipWriter(f, reader) as writer:
+
+                def write(filename: str, data: Any) -> None:
+                    writer.write(filename, zip_file_data(data))
+
+                yield write
 
     # write buffered samples to the zip file
-    def _write_buffered_samples(self, eval: EvalSpec) -> None:
+    def _write_buffered_samples(self, write: ZipWrite, eval: EvalSpec) -> None:
         # get the log
         log = self.data[self._log_file_key(eval)]
 
@@ -271,7 +281,7 @@ class EvalRecorder(FileRecorder):
         summaries: list[SampleSummary] = []
         for sample in log.samples:
             # Write the sample
-            self._write(eval, _sample_filename(sample.id, sample.epoch), sample)
+            write(_sample_filename(sample.id, sample.epoch), sample)
 
             # Capture the summary
             summaries.append(
@@ -292,7 +302,7 @@ class EvalRecorder(FileRecorder):
             log.summary_counter += 1
             summary_file = _journal_summary_file(log.summary_counter)
             summary_path = _journal_summary_path(summary_file)
-            self._write(eval, summary_path, summaries)
+            write(summary_path, summaries)
             log.summaries.extend(summaries)
 
 
