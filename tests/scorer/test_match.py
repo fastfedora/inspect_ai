@@ -38,3 +38,21 @@ async def test_non_numeric_match_plain():
     result = await scorer(state, Target(["32"]))
 
     assert result.text == CORRECT
+
+
+@pytest.mark.asyncio
+async def test_formatted_numeric_match_end():
+    scorer = match(numeric=True)
+    state = simple_task_state(model_output="£27.50 + £32.50 = £60.00")
+    result = await scorer(state, Target(["£60"]))
+
+    assert result.text == CORRECT
+
+
+@pytest.mark.asyncio
+async def test_formatted_numeric_match_plain():
+    scorer = match(numeric=True)
+    state = simple_task_state(model_output="£27.50 + £32.50 = £60.00")
+    result = await scorer(state, Target(["60"]))
+
+    assert result.text == CORRECT

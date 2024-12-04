@@ -61,7 +61,9 @@ def match_str(
     if ignore_case:
         v = v.casefold()
         t = t.casefold()
-    if numeric and t.isnumeric():
+
+    # target must be parseable as a number for numeric to apply
+    if numeric and strip_numeric_punctuation(t).replace(".", "").isnumeric():
         # remove punctuation
         v = strip_numeric_punctuation(v)
         t = strip_numeric_punctuation(t)
